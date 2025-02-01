@@ -10,6 +10,12 @@ These are what I(Ji) can think of so far:
     Opamp:         a difference Opamp, (2660 for VCC,VDD) gain should be less than 335 used for convert voltage 
                    from the thermocouple to ADC voltage  
     Buzzer:        same as lab2
+    
 2. software:
-    5 states: 
-    ![alt text](5 states.png)
+    5 states:               1. ramp to soak   2. soak           3. ramp to peak     4. reflow           5. cooling
+    adjustable paramaters:  1. soak time      2. reflow time    3. soak tmp         4. refolw tmp
+    time:                   we should maybe need a timer like the one used in lab2 to do the sec countdown
+    paramaters:             we should also need some stuff simmilar to lab2(time adjustment)
+
+
+3. Extra features 
