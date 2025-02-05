@@ -1,0 +1,291 @@
+0000              1   ; 76E003 ADC_Pushbuttons.asm: Reads push buttons using the ADC, AIN0 in P1.7
+0000              2   
+                  4   $LIST
+0000              6   
+0000              7   ;  N76E003 pinout:
+0000              8   ;                               -------
+0000              9   ;       PWM2/IC6/T0/AIN4/P0.5 -|1    20|- P0.4/AIN5/STADC/PWM3/IC3
+0000             10   ;               TXD/AIN3/P0.6 -|2    19|- P0.3/PWM5/IC5/AIN6
+0000             11   ;               RXD/AIN2/P0.7 -|3    18|- P0.2/ICPCK/OCDCK/RXD_1/[SCL]
+0000             12   ;                    RST/P2.0 -|4    17|- P0.1/PWM4/IC4/MISO
+0000             13   ;        INT0/OSCIN/AIN1/P3.0 -|5    16|- P0.0/PWM3/IC3/MOSI/T1
+0000             14   ;              INT1/AIN0/P1.7 -|6    15|- P1.0/PWM2/IC2/SPCLK
+0000             15   ;                         GND -|7    14|- P1.1/PWM1/IC1/AIN7/CLO
+0000             16   ;[SDA]/TXD_1/ICPDA/OCDDA/P1.6 -|8    13|- P1.2/PWM0/IC0
+0000             17   ;                         VDD -|9    12|- P1.3/SCL/[STADC]
+0000             18   ;            PWM5/IC7/SS/P1.5 -|10   11|- P1.4/SDA/FB/PWM1
+0000             19   ;                               -------
+0000             20   ;
+0000             21   
+0000             22   CLK               EQU 16600000 ; Microcontroller system frequency in Hz
+0000             23   BAUD              EQU 115200 ; Baud rate of UART in bps
+0000             24   TIMER1_RELOAD     EQU (0x100-(CLK/(16*BAUD)))
+0000             25   TIMER0_RELOAD_1MS EQU (0x10000-(CLK/1000))
+0000             26   
+0000             27   ORG 0x0000
+0000 02022D      28            ljmp main
+0003             29   
+0003             30   ;              1234567890123456    <- This helps determine the location of the counter
+0003 41444320    31   title:     db 'ADC PUSH BUTTONS', 0
+     50555348
+     20425554
+     544F4E53
+     00
+0014 20202020    32   blank:     db '                ', 0
+     20202020
+     20202020
+     20202020
+     00
+0025             33   
+0025             34   cseg
+0025             35   ; These 'equ' must match the hardware wiring
+0025             36   LCD_RS equ P1.3
+0025             37   LCD_E  equ P1.4
+0025             38   LCD_D4 equ P0.0
+0025             39   LCD_D5 equ P0.1
+0025             40   LCD_D6 equ P0.2
+0025             41   LCD_D7 equ P0.3
+0025             42   
+                 44   $LIST
+0112             46   
+0000             47   BSEG
+0000             48   ; These eight bit variables store the value of the pushbuttons after calling 'ADC_to_PB' below
+0000             49   PB0: dbit 1
+0001             50   PB1: dbit 1
+0002             51   PB2: dbit 1
+0003             52   PB3: dbit 1
+0004             53   PB4: dbit 1
+0005             54   PB5: dbit 1
+0006             55   PB6: dbit 1
+0007             56   PB7: dbit 1
+0008             57   
+0112             58   CSEG
+0112             59   Init_All:
+0112             60            ; Configure all the pins for biderectional I/O
+0112 75AC00      61            mov     P3M1, #0x00
+0115 75AD00      62            mov     P3M2, #0x00
+0118 75B300      63            mov     P1M1, #0x00
+011B 75B400      64            mov     P1M2, #0x00
+011E 75B100      65            mov     P0M1, #0x00
+0121 75B200      66            mov     P0M2, #0x00
+0124             67            
+0124 438E10      68            orl     CKCON, #0x10 ; CLK is the input for timer 1
+0127 438780      69            orl     PCON, #0x80 ; Bit SMOD=1, double baud rate
+012A 759852      70            mov     SCON, #0x52
+012D 53C4DF      71            anl     T3CON, #0b11011111
+0130 53890F      72            anl     TMOD, #0x0F ; Clear the configuration bits for timer 1
+0133 438920      73            orl     TMOD, #0x20 ; Timer 1 Mode 2
+0136 758DF7      74            mov     TH1, #TIMER1_RELOAD ; TH1=TIMER1_RELOAD;
+0139 D28E        75            setb TR1
+013B             76            
+013B             77            ; Using timer 0 for delay functions.  Initialize here:
+013B C28C        78            clr     TR0 ; Stop timer 0
+013D 438E08      79            orl     CKCON,#0x08 ; CLK is the input for timer 0
+0140 5389F0      80            anl     TMOD,#0xF0 ; Clear the configuration bits for timer 0
+0143 438901      81            orl     TMOD,#0x01 ; Timer 0 in Mode 1: 16-bit timer
+0146             82            
+0146             83            ; Initialize and start the ADC:
+0146             84            
+0146             85            ; AIN0 is connected to P1.7.  Configure P1.7 as input.
+0146 43B380      86            orl     P1M1, #0b10000000
+0149 53B47F      87            anl     P1M2, #0b01111111
+014C             88            
+014C             89            ; AINDIDS select if some pins are analog inputs or digital I/O:
+014C 75F600      90            mov AINDIDS, #0x00 ; Disable all analog inputs
+014F 43F601      91            orl AINDIDS, #0b00000001 ; Using AIN0
+0152 43E101      92            orl ADCCON1, #0x01 ; Enable ADC
+0155             93            
+0155 22          94            ret
+0156             95            
+0156             96   wait_1ms:
+0156 C28C        97            clr     TR0 ; Stop timer 0
+0158 C28D        98            clr     TF0 ; Clear overflow flag
+015A 758CBF      99            mov     TH0, #high(TIMER0_RELOAD_1MS)
+015D 758A28     100            mov     TL0,#low(TIMER0_RELOAD_1MS)
+0160 D28C       101            setb TR0
+0162 308DFD     102            jnb     TF0, $ ; Wait for overflow
+0165 22         103            ret
+0166            104   
+0166            105   ; Wait the number of miliseconds in R2
+0166            106   waitms:
+0166 120156     107            lcall wait_1ms
+0169 DAFB       108            djnz R2, waitms
+016B 22         109            ret
+016C            110   
+016C            111   ADC_to_PB:
+016C 53E8F0     112            anl ADCCON0, #0xF0
+016F 43E800     113            orl ADCCON0, #0x00 ; Select AIN0
+0172            114            
+0172 C2EF       115            clr ADCF
+0174 D2EE       116            setb ADCS   ; ADC start trigger signal
+0176 30EFFD     117       jnb ADCF, $ ; Wait for conversion complete
+0179            118   
+0179 D207       119            setb PB7
+017B D206       120            setb PB6
+017D D205       121            setb PB5
+017F D204       122            setb PB4
+0181 D203       123            setb PB3
+0183 D202       124            setb PB2
+0185 D201       125            setb PB1
+0187 D200       126            setb PB0
+0189            127            
+0189            128            ; Check PB7
+0189            129   ADC_to_PB_L7:
+0189 C3         130            clr c
+018A E5C3       131            mov a, ADCRH
+018C 94F0       132            subb a, #0xf0
+018E 4003       133            jc ADC_to_PB_L6
+0190 C207       134            clr PB7
+0192 22         135            ret
+0193            136   
+0193            137            ; Check PB6
+0193            138   ADC_to_PB_L6:
+0193 C3         139            clr c
+0194 E5C3       140            mov a, ADCRH
+0196 94D0       141            subb a, #0xd0
+0198 4003       142            jc ADC_to_PB_L5
+019A C206       143            clr PB6
+019C 22         144            ret
+019D            145   
+019D            146            ; Check PB5
+019D            147   ADC_to_PB_L5:
+019D C3         148            clr c
+019E E5C3       149            mov a, ADCRH
+01A0 94B0       150            subb a, #0xb0
+01A2 4003       151            jc ADC_to_PB_L4
+01A4 C205       152            clr PB5
+01A6 22         153            ret
+01A7            154   
+01A7            155            ; Check PB4
+01A7            156   ADC_to_PB_L4:
+01A7 C3         157            clr c
+01A8 E5C3       158            mov a, ADCRH
+01AA 9490       159            subb a, #0x90
+01AC 4003       160            jc ADC_to_PB_L3
+01AE C204       161            clr PB4
+01B0 22         162            ret
+01B1            163   
+01B1            164            ; Check PB3
+01B1            165   ADC_to_PB_L3:
+01B1 C3         166            clr c
+01B2 E5C3       167            mov a, ADCRH
+01B4 9470       168            subb a, #0x70
+01B6 4003       169            jc ADC_to_PB_L2
+01B8 C203       170            clr PB3
+01BA 22         171            ret
+01BB            172   
+01BB            173            ; Check PB2
+01BB            174   ADC_to_PB_L2:
+01BB C3         175            clr c
+01BC E5C3       176            mov a, ADCRH
+01BE 9450       177            subb a, #0x50
+01C0 4003       178            jc ADC_to_PB_L1
+01C2 C202       179            clr PB2
+01C4 22         180            ret
+01C5            181   
+01C5            182            ; Check PB1
+01C5            183   ADC_to_PB_L1:
+01C5 C3         184            clr c
+01C6 E5C3       185            mov a, ADCRH
+01C8 9430       186            subb a, #0x30
+01CA 4003       187            jc ADC_to_PB_L0
+01CC C201       188            clr PB1
+01CE 22         189            ret
+01CF            190   
+01CF            191            ; Check PB0
+01CF            192   ADC_to_PB_L0:
+01CF C3         193            clr c
+01D0 E5C3       194            mov a, ADCRH
+01D2 9410       195            subb a, #0x10
+01D4 4003       196            jc ADC_to_PB_Done
+01D6 C200       197            clr PB0
+01D8 22         198            ret
+01D9            199            
+01D9            200   ADC_to_PB_Done:
+01D9            201            ; No pusbutton pressed  
+01D9 22         202            ret
+01DA            203   
+01DA            204   Display_PushButtons_ADC:
+01DA C0E0       205            push acc
+01DC 7401       205            mov a, #1
+01DE 14         205            dec a
+01DF 1200D7     205            lcall ?Set_Cursor_2 ; Select column and row
+01E2 D0E0       205            pop acc
+01E4 7430       206            mov a, #'0'
+01E6 A207       207            mov c, PB7
+01E8 3400       208            addc a, #0
+01EA 12008F     209       lcall ?WriteData     
+01ED 7430       210            mov a, #'0'
+01EF A206       211            mov c, PB6
+01F1 3400       212            addc a, #0
+01F3 12008F     213       lcall ?WriteData     
+01F6 7430       214            mov a, #'0'
+01F8 A205       215            mov c, PB5
+01FA 3400       216            addc a, #0
+01FC 12008F     217       lcall ?WriteData     
+01FF 7430       218            mov a, #'0'
+0201 A204       219            mov c, PB4
+0203 3400       220            addc a, #0
+0205 12008F     221       lcall ?WriteData     
+0208 7430       222            mov a, #'0'
+020A A203       223            mov c, PB3
+020C 3400       224            addc a, #0
+020E 12008F     225       lcall ?WriteData     
+0211 7430       226            mov a, #'0'
+0213 A202       227            mov c, PB2
+0215 3400       228            addc a, #0
+0217 12008F     229       lcall ?WriteData     
+021A 7430       230            mov a, #'0'
+021C A201       231            mov c, PB1
+021E 3400       232            addc a, #0
+0220 12008F     233       lcall ?WriteData     
+0223 7430       234            mov a, #'0'
+0225 A200       235            mov c, PB0
+0227 3400       236            addc a, #0
+0229 12008F     237       lcall ?WriteData     
+022C 22         238            ret
+022D            239            
+022D            240   main:
+022D 75817F     241            mov sp, #0x7f
+0230 120112     242            lcall Init_All
+0233 120099     243       lcall LCD_4BIT
+0236            244       
+0236            245       ; initial messages in LCD
+0236 C0E0       246            push acc
+0238 7401       246            mov a, #1
+023A 14         246            dec a
+023B 1200D9     246            lcall ?Set_Cursor_1 ; Select column and row
+023E D0E0       246            pop acc
+0240 C083       247            push dph
+0242 C082       247            push dpl
+0244 C0E0       247            push acc
+0246 900003     247            mov dptr, #Title
+0249 1200CC     247            lcall ?Send_Constant_String
+024C D0E0       247            pop acc
+024E D082       247            pop dpl
+0250 D083       247            pop dph
+0252 C0E0       248            push acc
+0254 7401       248            mov a, #1
+0256 14         248            dec a
+0257 1200D7     248            lcall ?Set_Cursor_2 ; Select column and row
+025A D0E0       248            pop acc
+025C C083       249            push dph
+025E C082       249            push dpl
+0260 C0E0       249            push acc
+0262 900014     249            mov dptr, #blank
+0265 1200CC     249            lcall ?Send_Constant_String
+0268 D0E0       249            pop acc
+026A D082       249            pop dpl
+026C D083       249            pop dph
+026E            250            
+026E            251   Forever:
+026E 12016C     252            lcall ADC_to_PB
+0271 1201DA     253            lcall Display_PushButtons_ADC
+0274            254            
+0274            255            ; Wait 50 ms between readings
+0274 7A32       256            mov R2, #50
+0276 120166     257            lcall waitms
+0279            258            
+0279 02026E     259            ljmp Forever
+027C            260            
+027C            261   END
