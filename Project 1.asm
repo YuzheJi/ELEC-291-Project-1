@@ -258,23 +258,47 @@ main:
 	mov sp, #0x7f
 	lcall Init_All
     lcall LCD_4BIT
+
+	mov count, #0x00
+	mov a, #0x00
+	mov voltage_avg+0, a
+	mov voltage_avg+1, a 
+	mov voltage_avg+2, a
+	mov voltage_avg+3, a
+	mov voltage_avg+4, a
+	mov voltage_sum+0, a
+	mov voltage_sum+1, a
+	mov voltage_sum+2, a
+	mov voltage_sum+3, a
+	mov voltage_sum+4, a
     
 Forever:
 
 	lcall ADC_to_PB
-	lcall ADC_to_BCD_temp
-
-	lcall Display_temp_tc
+	lcall ADC_to_voltage_sum
 	
 	; Wait 20 ms between readings
 	mov R2, #20
 	lcall waitms
+	mov a, count 
 
-
+	cjne a, #0d25, add_count
+	mov a, #0x00
+	mov count, a 
+	lcall voltage_avg2bcd_temp_tc
+	lcall Display_temp_tc
+	ljmp exit 
 	
+add_count: 
+	add a, #0x01
+	mov count, a
+	ljmp exit
+
+exit:
 	ljmp Forever
 
-ADC_to_BCD_temp:
+
+ADC_to_voltage_sum:
 
 	anl ADCCON0, #0xF0
 	orl ADCCON0, #0x01 ; Select AIN1
@@ -305,18 +329,27 @@ ADC_to_BCD_temp:
 	Load_y(4095) ; 2^12-1
 	lcall div32
 	lcall hex2bcd
-	lcall Display_voltage_bcd
+	; lcall Display_voltage_bcd
 	; now x holds the voltage in hex
-	lcall voltage2temp
-	; now x holds the temp in hex
-	lcall hex2bcd
-	; now bcd holds the temp in bcd 
-	lcall bcd2bcd_temp_tc
+	Load_y(voltage_sum)
+	lcall add32
+	; now x holds the new voltage in hex
+	mov voltage_sum+0, x+0
+	mov voltage_sum+1, x+1
+	mov voltage_sum+2, x+2
+	mov voltage_sum+3, x+3
+	mov voltage_sum+4, x+4
 	ret 
 
-voltage2temp:
+voltage_avg2bcd_temp_tc:
+	Load_x(voltage_sum)
+	Load_y(25)
+	lcall div32
+	; now x holds avg of 25 voltages
 	Load_y(166)
 	lcall mul32
+	lcall hex2bcd
+	lcall bcd2bcd_temp_tc
 	ret	
 
 bcd2bcd_temp_tc:
